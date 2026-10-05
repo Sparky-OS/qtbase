@@ -24,10 +24,12 @@ class Q_WAYLANDCLIENT_EXPORT QWaylandGLContext : public QEGLPlatformContext
 {
 public:
     QWaylandGLContext();
-    QWaylandGLContext(EGLDisplay eglDisplay, QWaylandDisplay *display, const QSurfaceFormat &format, QPlatformOpenGLContext *share);
+    QWaylandGLContext(EGLDisplay eglDisplay, QWaylandDisplay *display, const QSurfaceFormat &format, QPlatformOpenGLContext *share,
+                      bool stereo = false);
     ~QWaylandGLContext();
 
     void initialize() override;
+    QSurfaceFormat format() const override;
     void swapBuffers(QPlatformSurface *surface) override;
 
     bool makeCurrent(QPlatformSurface *surface) override;
@@ -55,6 +57,7 @@ private:
     QWaylandEglWindow *m_currentWindow = nullptr;
     QMetaObject::Connection m_reconnectionWatcher;
     bool m_doneCurrentWorkAround = false;
+    bool m_stereo = false;
 };
 
 }

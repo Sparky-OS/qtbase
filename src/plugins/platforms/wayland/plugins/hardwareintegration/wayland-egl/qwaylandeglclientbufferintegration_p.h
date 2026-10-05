@@ -37,12 +37,14 @@ public:
     void *nativeResourceForContext(NativeResource resource, QPlatformOpenGLContext *context) override;
 
     EGLDisplay eglDisplay() const;
+    bool supportsStereo(const QSurfaceFormat &format) const override;
 
 private:
     QWaylandDisplay *m_display = nullptr;
 
     EGLDisplay m_eglDisplay = EGL_NO_DISPLAY;
     bool m_supportsThreading = false;
+    bool m_supportsMultiview = false;
 };
 
 QT_END_NAMESPACE

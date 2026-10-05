@@ -50,6 +50,7 @@ public:
 
     virtual bool supportsThreadedOpenGL() const { return false; }
     virtual bool supportsWindowDecoration() const { return false; }
+    virtual bool supportsStereo(const QSurfaceFormat &format) const { Q_UNUSED(format); return false; }
 
     virtual QWaylandWindow *createEglWindow(QWindow *window) = 0;
     virtual bool canCreatePlatformOffscreenSurface() const { return false; }

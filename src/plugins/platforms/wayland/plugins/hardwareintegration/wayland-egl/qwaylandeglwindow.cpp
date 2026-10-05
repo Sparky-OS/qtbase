@@ -116,9 +116,16 @@ void QWaylandEglWindow::updateSurface(bool create)
             if (mDisplay->supportsWindowDecoration())
                 fmt.setAlphaBufferSize(8);
             EGLConfig eglConfig = q_configFromGLFormat(m_clientBufferIntegration->eglDisplay(), fmt);
-            setFormat(q_glFormatFromConfig(m_clientBufferIntegration->eglDisplay(), eglConfig, fmt));
+            QSurfaceFormat eglFormat = q_glFormatFromConfig(m_clientBufferIntegration->eglDisplay(), eglConfig, fmt);
 
-            EGLSurface eglSurface = eglCreateWindowSurface(m_clientBufferIntegration->eglDisplay(), eglConfig, (EGLNativeWindowType) eglWindow, 0);
+            // Two views make the surface a stereo one: the left and the right back buffer
+            const bool stereo = m_clientBufferIntegration->supportsStereo(fmt);
+            const EGLint surfaceAttribs[] = { EGL_MULTIVIEW_VIEW_COUNT_EXT, 2, EGL_NONE };
+            if (stereo)
+                eglFormat.setStereo(true);
+            setFormat(eglFormat);
+
+            EGLSurface eglSurface = eglCreateWindowSurface(m_clientBufferIntegration->eglDisplay(), eglConfig, (EGLNativeWindowType) eglWindow, stereo ? surfaceAttribs : nullptr);
             if (Q_UNLIKELY(eglSurface == EGL_NO_SURFACE)) {
                 qCWarning(lcQpaWayland, "Could not create EGL surface (EGL error 0x%x)\n", eglGetError());
                 wl_egl_window_destroy(eglWindow);

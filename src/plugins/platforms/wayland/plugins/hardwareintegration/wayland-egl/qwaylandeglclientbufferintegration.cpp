@@ -10,6 +10,7 @@
 #include <wayland-client-core.h>
 
 #include <QtCore/QDebug>
+#include <QtGui/QOpenGLContext>
 #include <private/qeglconvenience_p.h>
 #include <private/qeglpbuffer_p.h>
 
@@ -83,6 +84,8 @@ void QWaylandEglClientBufferIntegration::initialize(QWaylandDisplay *display)
         return;
     }
 
+    m_supportsMultiview = q_hasEglExtension(m_eglDisplay, "EGL_EXT_multiview_window");
+
     m_supportsThreading = true;
     if (qEnvironmentVariableIsSet("QT_OPENGL_NO_SANITY_CHECK"))
         return;
@@ -128,7 +131,7 @@ QPlatformOpenGLContext *QWaylandEglClientBufferIntegration::createPlatformOpenGL
     QSurfaceFormat fmt = glFormat;
     if (m_display->supportsWindowDecoration())
         fmt.setAlphaBufferSize(8);
-    return new QWaylandGLContext(m_eglDisplay, m_display, fmt, share);
+    return new QWaylandGLContext(m_eglDisplay, m_display, fmt, share, supportsStereo(fmt));
 }
 
 QOpenGLContext *QWaylandEglClientBufferIntegration::createOpenGLContext(EGLContext context, EGLDisplay contextDisplay, QOpenGLContext *shareContext) const
@@ -176,6 +179,14 @@ void *QWaylandEglClientBufferIntegration::nativeResourceForContext(NativeResourc
 EGLDisplay QWaylandEglClientBufferIntegration::eglDisplay() const
 {
     return m_eglDisplay;
+}
+
+bool QWaylandEglClientBufferIntegration::supportsStereo(const QSurfaceFormat &format) const
+{
+    // Two views of the window surface are the left and right back buffers of desktop OpenGL
+    return format.stereo() && m_supportsMultiview
+            && format.renderableType() != QSurfaceFormat::OpenGLES
+            && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL;
 }
 
 }

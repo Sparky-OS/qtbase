@@ -226,9 +226,11 @@ QWaylandGLContext::QWaylandGLContext()
 }
 
 QWaylandGLContext::QWaylandGLContext(EGLDisplay eglDisplay, QWaylandDisplay *display,
-                                     const QSurfaceFormat &fmt, QPlatformOpenGLContext *share)
+                                     const QSurfaceFormat &fmt, QPlatformOpenGLContext *share,
+                                     bool stereo)
     : QEGLPlatformContext(fmt, share, eglDisplay)
     , m_display(display)
+    , m_stereo(stereo)
 {
     m_reconnectionWatcher = QObject::connect(m_display, &QWaylandDisplay::connected,
                                              m_display, [this] { invalidateContext(); });
@@ -311,6 +313,15 @@ void QWaylandGLContext::runGLChecks()
     }
 
     QEGLPlatformContext::runGLChecks();
+}
+
+QSurfaceFormat QWaylandGLContext::format() const
+{
+    QSurfaceFormat fmt = QEGLPlatformContext::format();
+    // EGL configs have no stereo flag; the two views of the window surface provide it
+    if (m_stereo)
+        fmt.setStereo(true);
+    return fmt;
 }
 
 QWaylandGLContext::~QWaylandGLContext()
