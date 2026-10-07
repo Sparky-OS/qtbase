@@ -1290,6 +1290,16 @@ void q_createNativeChildrenAndSetParent(const QWidget *parentWidget)
 
 }
 
+// The alpha size a translucent top-level asks for: 8 bits by default, and for a
+// format that asks for more than 8 bits per channel the alpha it asks for (any
+// alpha when it asks for none), so that a deep window stays deep.
+static int translucentAlphaBufferSize(const QSurfaceFormat &format)
+{
+    if (format.redBufferSize() > 8)
+        return qMax(format.alphaBufferSize(), 1);
+    return 8;
+}
+
 void QWidgetPrivate::create()
 {
     Q_Q(QWidget);
@@ -1341,7 +1351,7 @@ void QWidgetPrivate::create()
     QSurfaceFormat format = win->requestedFormat();
     if ((flags & Qt::Window) && win->surfaceType() != QSurface::OpenGLSurface
             && q->testAttribute(Qt::WA_TranslucentBackground)) {
-        format.setAlphaBufferSize(8);
+        format.setAlphaBufferSize(translucentAlphaBufferSize(format));
     }
     win->setFormat(format);
 
@@ -2233,7 +2243,8 @@ void QWidgetPrivate::updateIsTranslucent()
     if (QWindow *window = q->windowHandle()) {
         QSurfaceFormat format = window->format();
         const int oldAlpha = format.alphaBufferSize();
-        const int newAlpha = q->testAttribute(Qt::WA_TranslucentBackground) ? 8 : -1;
+        const int newAlpha = q->testAttribute(Qt::WA_TranslucentBackground)
+                ? translucentAlphaBufferSize(format) : -1;
         if (oldAlpha != newAlpha) {
             // QTBUG-85714: Do this only when the QWindow has not yet been create()'ed yet.
             //

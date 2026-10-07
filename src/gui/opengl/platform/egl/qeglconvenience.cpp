@@ -283,6 +283,25 @@ EGLConfig QEglConfigChooser::chooseConfig()
             if (filterConfig(configs[i]))
                 return configs.at(i);
         }
+
+        // No exact match: when an alpha size was asked for, take the config with the
+        // same colour channel sizes and the nearest deeper alpha.
+        EGLConfig deeper = nullptr;
+        EGLint deeperAlpha = 0;
+        for (int i = 0; m_confAttrAlpha && i < configs.size(); ++i) {
+            EGLint red = 0, green = 0, blue = 0, alpha = 0;
+            eglGetConfigAttrib(display(), configs[i], EGL_RED_SIZE, &red);
+            eglGetConfigAttrib(display(), configs[i], EGL_GREEN_SIZE, &green);
+            eglGetConfigAttrib(display(), configs[i], EGL_BLUE_SIZE, &blue);
+            eglGetConfigAttrib(display(), configs[i], EGL_ALPHA_SIZE, &alpha);
+            if (!m_ignore && red == m_confAttrRed && green == m_confAttrGreen && blue == m_confAttrBlue
+                    && alpha > m_confAttrAlpha && (!deeper || alpha < deeperAlpha)) {
+                deeper = configs.at(i);
+                deeperAlpha = alpha;
+            }
+        }
+        if (deeper)
+            return deeper;
     } while (q_reduceConfigAttributes(&configureAttributes));
 
     if (!cfg)

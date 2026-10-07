@@ -113,7 +113,8 @@ void QWaylandEglWindow::updateSurface(bool create)
             }
 
             QSurfaceFormat fmt = window()->requestedFormat();
-            if (mDisplay->supportsWindowDecoration())
+            // a format asking for more than 8 bits per channel keeps the alpha it asks for
+            if (mDisplay->supportsWindowDecoration() && fmt.redBufferSize() <= 8)
                 fmt.setAlphaBufferSize(8);
             EGLConfig eglConfig = q_configFromGLFormat(m_clientBufferIntegration->eglDisplay(), fmt);
             QSurfaceFormat eglFormat = q_glFormatFromConfig(m_clientBufferIntegration->eglDisplay(), eglConfig, fmt);

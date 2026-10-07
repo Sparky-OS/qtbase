@@ -129,7 +129,8 @@ QWaylandWindow *QWaylandEglClientBufferIntegration::createEglWindow(QWindow *win
 QPlatformOpenGLContext *QWaylandEglClientBufferIntegration::createPlatformOpenGLContext(const QSurfaceFormat &glFormat, QPlatformOpenGLContext *share) const
 {
     QSurfaceFormat fmt = glFormat;
-    if (m_display->supportsWindowDecoration())
+    // a format asking for more than 8 bits per channel keeps the alpha it asks for
+    if (m_display->supportsWindowDecoration() && fmt.redBufferSize() <= 8)
         fmt.setAlphaBufferSize(8);
     return new QWaylandGLContext(m_eglDisplay, m_display, fmt, share, supportsStereo(fmt));
 }

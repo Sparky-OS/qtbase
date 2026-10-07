@@ -375,6 +375,7 @@ private slots:
     void QTBUG6883_reparentStaticWidget2();
 
     void translucentWidget();
+    void translucentWidgetDeepFormat();
 
     void setClearAndResizeMask();
     void maskedUpdate();
@@ -10411,6 +10412,47 @@ void tst_QWidget::translucentWidget()
     // underlying native window. Otherwise the state would no longer
     // describe reality (the native window) See QTBUG-85714.
     QVERIFY(translucentFormat == window->format());
+}
+
+void tst_QWidget::translucentWidgetDeepFormat()
+{
+    // A translucent top-level asks for 8 bits of alpha, unless the format asks for more than
+    // 8 bits per channel: then it keeps the alpha that format asks for.
+    const QSurfaceFormat defaultFormat = QSurfaceFormat::defaultFormat();
+    auto alphaOfTranslucentWindow = [](const QSurfaceFormat &format) {
+        QSurfaceFormat::setDefaultFormat(format);
+        QWidget widget;
+        widget.setAttribute(Qt::WA_TranslucentBackground);
+        widget.winId(); // creates the QWindow, and with it the requested format
+        return widget.windowHandle()->requestedFormat().alphaBufferSize();
+    };
+    const auto cleanup = qScopeGuard([&] { QSurfaceFormat::setDefaultFormat(defaultFormat); });
+
+    QSurfaceFormat format;
+    QCOMPARE(alphaOfTranslucentWindow(format), 8);
+
+    format.setRedBufferSize(10);
+    format.setGreenBufferSize(10);
+    format.setBlueBufferSize(10);
+    format.setAlphaBufferSize(2);
+    QCOMPARE(alphaOfTranslucentWindow(format), 2);
+
+    format.setRedBufferSize(16);
+    format.setGreenBufferSize(16);
+    format.setBlueBufferSize(16);
+    format.setAlphaBufferSize(16);
+    QCOMPARE(alphaOfTranslucentWindow(format), 16);
+
+    // no alpha asked for: any alpha
+    format.setAlphaBufferSize(-1);
+    QVERIFY(alphaOfTranslucentWindow(format) > 0);
+
+    // 8 bits per channel and less keep the default of 8
+    format.setRedBufferSize(8);
+    format.setGreenBufferSize(8);
+    format.setBlueBufferSize(8);
+    format.setAlphaBufferSize(2);
+    QCOMPARE(alphaOfTranslucentWindow(format), 8);
 }
 
 class MaskResizeTestWidget : public QWidget
