@@ -375,7 +375,8 @@ void QBackingStoreDefaultCompositor::updatePerQuadData(PerQuadData *d, QRhiTextu
     // QRhiTexture* from the same index in a subsequent flush.
 
     const QRhiSampler::Filter filter = options.testFlag(NeedsLinearFiltering) ? QRhiSampler::Linear : QRhiSampler::Nearest;
-    if ((d->lastUsedTexture == texture && d->lastUsedFilter == filter) || !d->srb)
+    if ((d->lastUsedTexture == texture && d->lastUsedTextureExtra == textureExtra && d->lastUsedFilter == filter)
+            || !d->srb)
         return;
 
     QRhiSampler *sampler = filter == QRhiSampler::Linear ? m_samplerLinear.get() : m_samplerNearest.get();
