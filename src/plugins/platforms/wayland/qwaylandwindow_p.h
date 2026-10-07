@@ -192,6 +192,7 @@ public:
                                      Qt::KeyboardModifiers modifiers);
 
     virtual bool createDecoration();
+    bool isStereoOpenGLWindow() const;
 
 #if QT_CONFIG(cursor)
     void restoreMouseCursor(QWaylandInputDevice *device);

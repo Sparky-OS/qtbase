@@ -238,9 +238,7 @@ void QWaylandWindow::initializeWlSurface(bool colorSpace)
     emit wlSurfaceCreated();
 
     // The EGL implementation gives a stereo surface its own viewport, and a surface has only one
-    const QWaylandClientBufferIntegration *bufferIntegration = mDisplay->clientBufferIntegration();
-    const bool stereo = bufferIntegration && window()->surfaceType() == QSurface::OpenGLSurface
-            && bufferIntegration->supportsStereo(window()->requestedFormat());
+    const bool stereo = isStereoOpenGLWindow();
     if (!stereo && mDisplay->fractionalScaleManager() && qApp->highDpiScaleFactorRoundingPolicy() == Qt::HighDpiScaleFactorRoundingPolicy::PassThrough) {
         mFractionalScale.reset(new QWaylandFractionalScale(mDisplay->fractionalScaleManager()->get_fractional_scale(mSurface->object())));
 
@@ -1093,12 +1091,23 @@ Qt::WindowFlags QWaylandWindow::windowFlags() const
     return mFlags;
 }
 
+bool QWaylandWindow::isStereoOpenGLWindow() const
+{
+    const QWaylandClientBufferIntegration *bufferIntegration = mDisplay->clientBufferIntegration();
+    return bufferIntegration && window()->surfaceType() == QSurface::OpenGLSurface
+            && bufferIntegration->supportsStereo(window()->requestedFormat());
+}
+
 bool QWaylandWindow::createDecoration()
 {
     Q_ASSERT_X(QThread::isMainThread(),
                "QWaylandWindow::createDecoration", "not called from main thread");
     // TODO: client side decorations do not work with Vulkan backend.
     if (window()->surfaceType() == QSurface::VulkanSurface)
+        return false;
+    // Client side decorations render the content into a mono FBO, which would leave one eye of a
+    // stereo window; the left and right back buffers need the window surface itself.
+    if (isStereoOpenGLWindow())
         return false;
     if (!mDisplay->supportsWindowDecoration())
         return false;
