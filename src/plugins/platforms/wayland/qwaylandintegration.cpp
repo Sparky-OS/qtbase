@@ -137,6 +137,12 @@ bool QWaylandIntegration::hasCapability(QPlatformIntegration::Capability cap) co
     case OffscreenSurface:
         return mDisplay->clientBufferIntegration()
                 && mDisplay->clientBufferIntegration()->canCreatePlatformOffscreenSurface();
+    case StereoNativeWindows: {
+        // Each Wayland window is a surface of its own, so a stereo child is a subsurface
+        QSurfaceFormat format;
+        format.setStereo(true);
+        return mDisplay->clientBufferIntegration() && mDisplay->clientBufferIntegration()->supportsStereo(format);
+    }
     default: return QPlatformIntegration::hasCapability(cap);
     }
 }

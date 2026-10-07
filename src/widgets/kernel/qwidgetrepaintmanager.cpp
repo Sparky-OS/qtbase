@@ -1045,6 +1045,13 @@ void QWidgetRepaintManager::flush(QWidget *widget, const QRegion &region, QPlatf
     if (widget != tlw)
         offset += widget->mapTo(tlw, QPoint());
 
+    // A native widget under alien ancestors is not moved along when they move (scroll areas)
+    if (widget != tlw && widget->d_func()->hasStereoWindow()) {
+        const QPoint posInNativeParent = widget->mapTo(widget->nativeParentWidget(), QPoint());
+        if (window->position() != posInNativeParent)
+            window->setPosition(posInNativeParent);
+    }
+
     // A widget uses RHI flush if itself, or one of its non-native children
     // uses RHI for its drawing. If so, we composite the backing store raster
     // data along with textures produced by the RHI widgets.

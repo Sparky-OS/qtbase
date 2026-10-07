@@ -646,6 +646,9 @@ public:
     // These two are used in QGraphicsView for supporting stereoscopic rendering with a
     // QOpenGLWidget viewport.
     virtual bool isStereoEnabled() { return false; } // Called in QGraphicsView::setupViewport
+    bool platformComposesStereoWindows() const;
+    bool hasStereoWindow();
+    bool enforcesNativeSiblings();
     virtual bool toggleStereoTargetBuffer() { return false; } // Called in QGraphicsView::paintEvent
 
     static void setWidgetParentHelper(QObject *widgetAsObject, QObject *newParent);

@@ -239,6 +239,10 @@ QPlatformServices *QPlatformIntegration::services() const
     without falling back to an implementation utilizing an invisible QWindow. A platform
     without this capability requires QOffscreenSurface::create to be called from the GUI
     thread.
+
+    \value StereoNativeWindows The platform shows a native child window with a stereo
+    surface format as a stereo surface of its own, whatever the format of its parent window.
+    The default implementation of hasCapability() returns \c false.
  */
 
 /*!

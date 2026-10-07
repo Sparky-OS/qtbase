@@ -103,7 +103,8 @@ public:
         RhiBasedRendering,
         ScreenWindowGrabbing, // whether QScreen::grabWindow() is supported
         BackingStoreStaticContents,
-        OffscreenSurface
+        OffscreenSurface,
+        StereoNativeWindows // whether a native child window can be a stereo surface of its own
     };
 
     virtual ~QPlatformIntegration() { }

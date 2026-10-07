@@ -1031,6 +1031,24 @@ void QWidgetPrivate::createRecursively()
     }
 }
 
+bool QWidgetPrivate::platformComposesStereoWindows() const
+{
+    return QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::StereoNativeWindows);
+}
+
+// Whether the widget renders stereo into a native window of its own, a stereo surface
+bool QWidgetPrivate::hasStereoWindow()
+{
+    return isStereoEnabled() && platformComposesStereoWindows();
+}
+
+// Whether making this widget native makes its siblings native too, to keep the stacking order.
+// A stereo window stacks above the widgets that stay in the top level's surface.
+bool QWidgetPrivate::enforcesNativeSiblings()
+{
+    return !QCoreApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) && !hasStereoWindow();
+}
+
 QRhi *QWidgetPrivate::rhi() const
 {
     Q_Q(const QWidget);
@@ -1214,6 +1232,12 @@ void QWidget::create(WId window, bool initializeWindow, bool destroyOldWindow)
     if (QApplicationPrivate::testAttribute(Qt::AA_NativeWindows))
         setAttribute(Qt::WA_NativeWindow);
 
+    // Stereo belongs to the surface that shows the 3D: a widget that renders stereo gets a window of its own
+    if (!isWindow() && d->hasStereoWindow()) {
+        setAttribute(Qt::WA_DontCreateNativeAncestors);
+        setAttribute(Qt::WA_NativeWindow);
+    }
+
     if (isWindow()
 #if QT_CONFIG(graphicsview)
         && !graphicsProxyWidget()
@@ -1349,6 +1373,10 @@ void QWidgetPrivate::create()
     }
 
     QSurfaceFormat format = win->requestedFormat();
+    // Where a stereo window is a surface of its own, a window is stereo when its widget renders stereo, and
+    // a top level that only holds the 2D interface (the default format asks for stereo) is not
+    if (platformComposesStereoWindows())
+        format.setStereo(isStereoEnabled());
     if ((flags & Qt::Window) && win->surfaceType() != QSurface::OpenGLSurface
             && q->testAttribute(Qt::WA_TranslucentBackground)) {
         format.setAlphaBufferSize(translucentAlphaBufferSize(format));
@@ -10811,7 +10839,7 @@ void QWidget::setParent(QWidget *parent, Qt::WindowFlags f)
     bool newParent = (parent != parentWidget());
 
     if (newParent && parent) {
-        if (testAttribute(Qt::WA_NativeWindow) && !QCoreApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings))
+        if (testAttribute(Qt::WA_NativeWindow) && d->enforcesNativeSiblings())
             parent->d_func()->enforceNativeChildren();
         else if (parent->d_func()->nativeChildrenForced() || parent->testAttribute(Qt::WA_PaintOnScreen))
             setAttribute(Qt::WA_NativeWindow);
@@ -11556,7 +11584,7 @@ void QWidget::setAttribute(Qt::WidgetAttribute attribute, bool on)
             QGuiApplication::inputMethod()->commit();
             QGuiApplication::inputMethod()->update(Qt::ImEnabled);
         }
-        if (!QCoreApplication::testAttribute(Qt::AA_DontCreateNativeWidgetSiblings) && parentWidget())
+        if (d->enforcesNativeSiblings() && parentWidget())
             parentWidget()->d_func()->enforceNativeChildren();
         if (on && !internalWinId() && testAttribute(Qt::WA_WState_Created))
             d->createWinId();

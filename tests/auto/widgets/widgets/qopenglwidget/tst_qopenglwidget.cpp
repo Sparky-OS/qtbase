@@ -49,6 +49,7 @@ private slots:
     void fboRedirect();
     void showHide();
     void nativeWindow();
+    void stereoWindow();
     void stackWidgetOpaqueChildIsVisible();
     void offscreen();
     void offscreenThenOnscreen();
@@ -841,6 +842,49 @@ bool verifyColor(const QWidget *widget, const QRect &clipArea, const QColor &col
     }
 
     return true;
+}
+
+void tst_QOpenGLWidget::stereoWindow()
+{
+    if (!QGuiApplicationPrivate::platformIntegration()->hasCapability(QPlatformIntegration::StereoNativeWindows))
+        QSKIP("The platform does not show stereo native windows");
+
+    // A widget that renders stereo is a stereo window of its own, in the stereo and in the mono case of
+    // the top level's format: the top level and the widgets around it are a one-eye surface.
+    for (bool stereoTopLevel : { false, true }) {
+        QSurfaceFormat defaultFormat = QSurfaceFormat::defaultFormat();
+        QSurfaceFormat stereoFormat = defaultFormat;
+        stereoFormat.setStereo(true);
+        if (stereoTopLevel)
+            QSurfaceFormat::setDefaultFormat(stereoFormat);
+
+        QWidget topLevel;
+        topLevel.resize(400, 300);
+        QLabel *label = new QLabel("2D", &topLevel);
+        ClearWidget *w = new ClearWidget(&topLevel, 300, 200);
+        if (!stereoTopLevel)
+            w->setFormat(stereoFormat);
+        w->move(10, 40);
+        topLevel.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&topLevel));
+        QSurfaceFormat::setDefaultFormat(defaultFormat);
+
+        QVERIFY(w->windowHandle());
+        QVERIFY(w->windowHandle()->requestedFormat().stereo());
+        QVERIFY(!topLevel.windowHandle()->requestedFormat().stereo());
+        QVERIFY(!label->windowHandle());
+        QCOMPARE(w->windowHandle()->parent(), topLevel.windowHandle());
+
+        // A mono widget keeps the top level's surface
+        ClearWidget *mono = new ClearWidget(&topLevel, 100, 100);
+        QSurfaceFormat monoFormat = defaultFormat;
+        monoFormat.setStereo(false);
+        mono->setFormat(monoFormat);
+        mono->setGeometry(320, 40, 70, 70);
+        mono->show();
+        QTRY_VERIFY(mono->m_paintCalled);
+        QVERIFY(!mono->windowHandle());
+    }
 }
 
 void tst_QOpenGLWidget::stackWidgetOpaqueChildIsVisible()

@@ -431,6 +431,16 @@ QT_BEGIN_NAMESPACE
   \note Using setFormat() will not necessarily work because of how the flag is
   handled internally.
 
+  On platforms with the QPlatformIntegration::StereoNativeWindows capability (Wayland,
+  when the EGL implementation supports stereo surfaces), a QOpenGLWidget that asks for
+  stereo, in its own format or in the default format, is shown in a native window of
+  its own, a stereo surface placed at the widget's position, while the top-level window
+  and the other widgets stay an ordinary one-eye surface. Child widgets of the
+  QOpenGLWidget are drawn over it, the same in both buffers. As for any native child
+  widget, widgets that overlap it from outside are covered by it, and it is not clipped
+  to the widget's ancestors: where the widget is partly outside its parent, the window
+  extends over that area and shows the top-level window's content there.
+
   This will trigger paintGL() to be called twice each frame,
   once for each QOpenGLWidget::TargetBuffer. In paintGL(), call
   currentTargetBuffer() to query which one is currently being drawn to.
