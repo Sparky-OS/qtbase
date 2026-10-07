@@ -92,6 +92,14 @@
 #define GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 0x00000002
 #endif
 
+// Constants for the left and right back buffers of a stereo window surface (desktop OpenGL).
+#ifndef GL_BACK_LEFT
+#define GL_BACK_LEFT 0x0402
+#endif
+#ifndef GL_BACK_RIGHT
+#define GL_BACK_RIGHT 0x0403
+#endif
+
 // Constants from EGL_NV_robustness_video_memory_purge
 #ifndef EGL_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV
 #define EGL_GENERATE_RESET_ON_VIDEO_MEMORY_PURGE_NV 0x334C
@@ -104,9 +112,13 @@ namespace QtWaylandClient {
 class DecorationsBlitter : public QOpenGLFunctions
 {
 public:
-    DecorationsBlitter(QWaylandGLContext *context)
+    DecorationsBlitter(QWaylandGLContext *context, bool stereo)
         : m_context(context)
     {
+        // A stereo window surface needs the eye picked for each draw, which only desktop OpenGL can do
+        if (stereo)
+            m_drawBuffer = reinterpret_cast<void (QOPENGLF_APIENTRYP)(GLenum)>(
+                    m_context->context()->getProcAddress("glDrawBuffer"));
         initializeOpenGLFunctions();
         m_blitProgram = new QOpenGLShaderProgram();
         m_blitProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, "attribute vec4 position;\n\
@@ -184,6 +196,17 @@ public:
     }
     void blit(QWaylandEglWindow *window)
     {
+        // The decoration is the same in both eyes of a stereo window, and each eye has its own content
+        const int eyes = m_drawBuffer ? window->contentEyes() : 1;
+        for (int eye = 0; eye < eyes; ++eye) {
+            if (m_drawBuffer)
+                m_drawBuffer(eye == 1 ? GL_BACK_RIGHT : GL_BACK_LEFT);
+            blit(window, eye);
+        }
+    }
+
+    void blit(QWaylandEglWindow *window, int eye)
+    {
         QOpenGLTextureCache *cache = QOpenGLTextureCache::cacheForContext(m_context->context());
 
         QSize surfaceSize = window->surfaceSize();
@@ -204,7 +227,7 @@ public:
 
         //Draw Content
         m_blitProgram->setAttributeBuffer(0, GL_FLOAT, m_squareVerticesOffset, 2);
-        glBindTexture(GL_TEXTURE_2D, window->contentTexture());
+        glBindTexture(GL_TEXTURE_2D, window->contentTexture(eye));
         QRect r = window->contentsRect();
         glViewport(r.x() * scale, r.y() * scale, r.width() * scale, r.height() * scale);
         glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -217,6 +240,7 @@ public:
     int m_inverseSquareVerticesOffset;
     int m_textureVerticesOffset;
     int m_textureWrap;
+    void (QOPENGLF_APIENTRYP m_drawBuffer)(GLenum) = nullptr;
 };
 
 QWaylandGLContext::QWaylandGLContext()
@@ -375,8 +399,13 @@ void QWaylandGLContext::initialize()
 
         eglDecorationsContextAttrs << EGL_NONE;
 
+        // The blitter of a stereo window draws into the left and right back buffers: desktop OpenGL
+        if (m_stereo)
+            eglBindAPI(EGL_OPENGL_API);
         m_decorationsContext = eglCreateContext(eglDisplay(), eglConfig(), eglContext(),
                                                 eglDecorationsContextAttrs.constData());
+        if (m_stereo)
+            eglBindAPI(m_api);
         if (m_decorationsContext == EGL_NO_CONTEXT)
             qWarning("QWaylandGLContext: Failed to create the decorations EGLContext. Decorations will not be drawn.");
     }
@@ -478,8 +507,12 @@ void QWaylandGLContext::swapBuffers(QPlatformSurface *surface)
     EGLSurface eglSurface = window->eglSurface();
 
     if (window->decoration()) {
-        if (m_api != EGL_OPENGL_ES_API)
-            eglBindAPI(EGL_OPENGL_ES_API);
+        const EGLenum decorationsApi = m_stereo ? EGL_OPENGL_API : EGL_OPENGL_ES_API;
+        if (m_api != decorationsApi)
+            eglBindAPI(decorationsApi);
+        // the blitter reads the eyes rendered by this context
+        if (m_stereo)
+            glFlush();
 
         // save the current EGL content and surface to set it again after the blitter is done
         EGLDisplay currentDisplay = eglGetCurrentDisplay();
@@ -489,10 +522,10 @@ void QWaylandGLContext::swapBuffers(QPlatformSurface *surface)
         eglMakeCurrent(eglDisplay(), eglSurface, eglSurface, m_decorationsContext);
 
         if (!m_blitter)
-            m_blitter = new DecorationsBlitter(this);
+            m_blitter = new DecorationsBlitter(this, m_stereo);
         m_blitter->blit(window);
 
-        if (m_api != EGL_OPENGL_ES_API)
+        if (m_api != decorationsApi)
             eglBindAPI(m_api);
         eglMakeCurrent(currentDisplay, currentSurfaceDraw, currentSurfaceRead, currentContext);
     }

@@ -3563,12 +3563,24 @@ void QRhiGles2::executeCommandBuffer(QRhiCommandBuffer *cb)
         {
             QVarLengthArray<GLenum, 8> bufs;
             GLuint fbo = cmd.args.bindFramebuffer.fbo;
+            const bool isDefaultFbo = !fbo;
             if (!fbo)
                 fbo = ctx->defaultFramebufferObject();
             f->glBindFramebuffer(GL_FRAMEBUFFER, fbo);
             if (fbo) {
                 const int colorAttCount = cmd.args.bindFramebuffer.colorAttCount;
-                bufs.append(colorAttCount > 0 ? GL_COLOR_ATTACHMENT0 : GL_NONE);
+                GLenum colorAtt = GL_COLOR_ATTACHMENT0;
+                if (isDefaultFbo && cmd.args.bindFramebuffer.stereo
+                        && cmd.args.bindFramebuffer.stereoTarget == QRhiSwapChain::RightBuffer) {
+                    // The platform's default framebuffer object has a slot per eye when it
+                    // has a second color attachment, as the Wayland one has for a stereo window
+                    GLint type = GL_NONE;
+                    f->glGetFramebufferAttachmentParameteriv(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1,
+                                                             GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE, &type);
+                    if (type != GL_NONE)
+                        colorAtt = GL_COLOR_ATTACHMENT1;
+                }
+                bufs.append(colorAttCount > 0 ? colorAtt : GL_NONE);
                 if (caps.maxDrawBuffers > 1) {
                     for (int i = 1; i < colorAttCount; ++i)
                         bufs.append(GL_COLOR_ATTACHMENT0 + uint(i));

@@ -181,6 +181,11 @@ GLuint QWaylandEglWindow::contentFBO() const
         QOpenGLFramebufferObject *old = m_contentFBO;
         QSize fboSize = geometry().size() * scale();
         m_contentFBO = new QOpenGLFramebufferObject(fboSize.width(), fboSize.height(), QOpenGLFramebufferObject::CombinedDepthStencil);
+        // A stereo window has a slot per eye: the right eye is rendered into the second attachment
+        if (m_clientBufferIntegration->supportsStereo(window()->requestedFormat())) {
+            m_contentFBO->bind();
+            m_contentFBO->addColorAttachment(fboSize);
+        }
 
         delete old;
         m_resize = false;
@@ -189,9 +194,14 @@ GLuint QWaylandEglWindow::contentFBO() const
     return m_contentFBO->handle();
 }
 
-GLuint QWaylandEglWindow::contentTexture() const
+GLuint QWaylandEglWindow::contentTexture(int eye) const
 {
-    return m_contentFBO->texture();
+    return m_contentFBO->textures().value(eye);
+}
+
+int QWaylandEglWindow::contentEyes() const
+{
+    return m_contentFBO->textures().size();
 }
 
 void QWaylandEglWindow::bindContentFBO()

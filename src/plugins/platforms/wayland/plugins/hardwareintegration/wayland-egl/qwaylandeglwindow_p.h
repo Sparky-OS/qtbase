@@ -30,7 +30,8 @@ public:
 
     EGLSurface eglSurface() const;
     GLuint contentFBO() const;
-    GLuint contentTexture() const;
+    GLuint contentTexture(int eye = 0) const;
+    int contentEyes() const;
     bool needToUpdateContentFBO() const { return decoration() && (m_resize || !m_contentFBO); }
 
     void bindContentFBO();
