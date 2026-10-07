@@ -106,6 +106,11 @@ void QWaylandEglWindow::updateSurface(bool create)
                 m_resize = true;
             }
         } else if (create && mSurface) {
+            // The EGL implementation sizes a stereo surface itself, from the window it is created with and
+            // not from the size Qt gives the surface later: wait until the window is shown and has its size
+            if (!window()->isVisible() && m_clientBufferIntegration->supportsStereo(window()->requestedFormat()))
+                return;
+
             wl_egl_window *eglWindow = wl_egl_window_create(mSurface->object(), sizeWithMargins.width(), sizeWithMargins.height());
             if (Q_UNLIKELY(!eglWindow)) {
                 qCWarning(lcQpaWayland, "Could not create wl_egl_window with size %dx%d\n", sizeWithMargins.width(), sizeWithMargins.height());
