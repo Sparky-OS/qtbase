@@ -1,4 +1,5 @@
 // Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2026 Daniel Campos Ramos
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
@@ -182,7 +183,24 @@ static QImageIOHandler *createReadHandlerHelper(QIODevice *device,
         testFormat = QByteArray();
 
 #if QT_CONFIG(imageformatplugin)
-    if (!testFormat.isEmpty()) {
+    // Stereo JPEG readers must see their marks before the ordinary JPEG decoder.
+    if (form.isEmpty() && device && (autoDetectImageFormat || ignoresFormatAndExtension)
+        && device->peek(2) == QByteArrayLiteral("\xff\xd8")) {
+        int lastStereoPluginIndex = -1;
+        for (const QString &key : {QStringLiteral("mpo"), QStringLiteral("jps")}) {
+            const int index = l->indexOf(key);
+            if (index < 0 || index == lastStereoPluginIndex)
+                continue;
+            lastStereoPluginIndex = index;
+            auto *plugin = qobject_cast<QImageIOPlugin *>(l->instance(index));
+            if (plugin && (plugin->capabilities(device, QByteArray()) & QImageIOPlugin::CanRead)) {
+                handler = plugin->create(device, QByteArray());
+                testFormatPluginIndex = index;
+                break;
+            }
+        }
+    }
+    if (!handler && !testFormat.isEmpty()) {
         // Check first support for the given format name or suffix among our plugins' registered
         // formats. This allows plugins to override our built-in handlers.
         qCDebug(lcImageReader) << "Checking if any plugins have explicitly declared support"
