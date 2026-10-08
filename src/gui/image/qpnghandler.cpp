@@ -1,5 +1,6 @@
 // Copyright (C) 2013 Samuel Gaist <samuel.gaist@edeltech.ch>
 // Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2026 Daniel Campos Ramos
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:critical reason:data-parser
 
@@ -84,6 +85,8 @@ public:
     int quality; // quality is used for backward compatibility, maps to compression
     int compression;
     QString description;
+    QString stereo3DLayout;
+    bool invalidStereoChunk = false;
     QStringList readTexts;
     QColorSpace colorSpace;
     ColorSpaceState colorSpaceState;
@@ -352,8 +355,12 @@ bool setup_qt(QImage& image, png_structp png_ptr, png_infop info_ptr)
 }
 
 extern "C" {
-static void qt_png_warning(png_structp /*png_ptr*/, png_const_charp message)
+static void qt_png_warning(png_structp png_ptr, png_const_charp message)
 {
+    if (auto *d = static_cast<QPngHandlerPrivate *>(png_get_error_ptr(png_ptr));
+        d && strncmp(message, "sTER:", 5) == 0) {
+        d->invalidStereoChunk = true;
+    }
     qCInfo(lcImageIo, "libpng warning: %s", message);
 }
 
@@ -370,6 +377,10 @@ void QPngHandlerPrivate::readPngTexts(png_info *info)
     while (num_text--) {
         QString key, value;
         key = QString::fromLatin1(text_ptr->key);
+        if (key == "Stereo3DLayout"_L1 && !stereo3DLayout.isEmpty()) {
+            ++text_ptr;
+            continue;
+        }
 #if defined(PNG_iTXt_SUPPORTED)
         if (text_ptr->itxt_length) {
             value = QString::fromUtf8(text_ptr->text, int(text_ptr->itxt_length));
@@ -398,7 +409,7 @@ bool QPngHandlerPrivate::readPngHeader()
     if (!png_ptr)
         return false;
 
-    png_set_error_fn(png_ptr, nullptr, nullptr, qt_png_warning);
+    png_set_error_fn(png_ptr, this, nullptr, qt_png_warning);
 
 #if defined(PNG_SET_OPTION_SUPPORTED) && defined(PNG_MAXIMUM_INFLATE_WINDOW)
     // Trade off a little bit of memory for better compatibility with existing images
@@ -427,9 +438,36 @@ bool QPngHandlerPrivate::readPngHeader()
     }
 
     png_set_read_fn(png_ptr, this, iod_read_fn);
+#if defined(PNG_READ_UNKNOWN_CHUNKS_SUPPORTED) && defined(PNG_HANDLE_AS_UNKNOWN_SUPPORTED)
+    const png_byte stereoChunk[] = "sTER";
+    png_set_keep_unknown_chunks(png_ptr, PNG_HANDLE_CHUNK_ALWAYS, stereoChunk, 1);
+#endif
     png_read_info(png_ptr, info_ptr);
 
+#if defined(PNG_READ_UNKNOWN_CHUNKS_SUPPORTED) && defined(PNG_STORE_UNKNOWN_CHUNKS_SUPPORTED)
+    png_unknown_chunkp chunks = nullptr;
+    const int count = png_get_unknown_chunks(png_ptr, info_ptr, &chunks);
+    int stereoCount = 0;
+    for (int i = 0; i < count; ++i) {
+        if (memcmp(chunks[i].name, "sTER", 4) == 0) {
+            ++stereoCount;
+            if (chunks[i].size == 1 && chunks[i].data[0] <= 1)
+                stereo3DLayout = chunks[i].data[0] == 0 ? "sideBySideRightFirst"_L1 : "sideBySideLeftFirst"_L1;
+        }
+    }
+    const png_uint_32 width = png_get_image_width(png_ptr, info_ptr);
+    const png_uint_32 padding = 15 - ((width - 1) % 16);
+    if (stereoCount != 1 || invalidStereoChunk || padding > 7 || width <= padding)
+        stereo3DLayout.clear();
+#endif
     readPngTexts(info_ptr);
+    if (!stereo3DLayout.isEmpty()) {
+        if (!description.isEmpty())
+            description += "\n\n"_L1;
+        description += "Stereo3DLayout: "_L1 + stereo3DLayout;
+        readTexts.append("Stereo3DLayout"_L1);
+        readTexts.append(stereo3DLayout);
+    }
 
 #ifdef PNG_iCCP_SUPPORTED
     if (png_get_valid(png_ptr, info_ptr, PNG_INFO_iCCP)) {

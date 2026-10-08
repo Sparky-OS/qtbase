@@ -1,7 +1,9 @@
 // Copyright (C) 2016 The Qt Company Ltd.
+// Copyright (C) 2026 Daniel Campos Ramos
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR GPL-3.0-only
 
 #include <QTest>
+#include <QtEndian>
 
 #include <QBuffer>
 #include <QColorSpace>
@@ -55,6 +57,8 @@ public slots:
 
 private slots:
     void getSetCheck();
+    void stereoPng_data();
+    void stereoPng();
     void readImage_data();
     void readImage();
     void jpegRgbCmyk();
@@ -2203,6 +2207,106 @@ void tst_QImageReader::xbmBufferHandling()
     buffer.append("0x");
     // Only check we get no buffer overflow
     QImage::fromData(buffer, "xbm");
+}
+
+static QByteArray pngChunk(const char *type, const QByteArray &data, bool badCrc = false)
+{
+    QByteArray result(4, '\0');
+    qToBigEndian<quint32>(data.size(), result.data());
+    const QByteArray body = QByteArray(type, 4) + data;
+    result += body;
+    QByteArray crc(4, '\0');
+    quint32 checksum = 0xffffffff;
+    for (uchar byte : body) {
+        checksum ^= byte;
+        for (int bit = 0; bit < 8; ++bit)
+            checksum = (checksum >> 1) ^ (0xedb88320 & (0 - (checksum & 1)));
+    }
+    qToBigEndian<quint32>((checksum ^ 0xffffffff) ^ quint32(badCrc), crc.data());
+    return result + crc;
+}
+
+
+void tst_QImageReader::stereoPng_data()
+{
+    QTest::addColumn<QByteArray>("mode");
+    QTest::addColumn<QString>("expected");
+    QTest::addColumn<bool>("late");
+    QTest::addColumn<bool>("badCrc");
+    QTest::addColumn<bool>("duplicate");
+    QTest::addColumn<int>("width");
+    QTest::addColumn<bool>("conflict");
+    QTest::newRow("cross-fuse") << QByteArray(1, '\0') << QStringLiteral("sideBySideRightFirst") << false << false << false << 16 << false;
+    QTest::newRow("diverge") << QByteArray(1, '\1') << QStringLiteral("sideBySideLeftFirst") << false << false << false << 16 << false;
+    QTest::newRow("unmarked") << QByteArray() << QString() << false << false << false << 16 << false;
+    QTest::newRow("reserved-mode") << QByteArray(1, '\2') << QString() << false << false << false << 16 << false;
+    QTest::newRow("wrong-length") << QByteArray(2, '\1') << QString() << false << false << false << 16 << false;
+    QTest::newRow("late") << QByteArray(1, '\1') << QString() << true << false << false << 16 << false;
+    QTest::newRow("bad-crc") << QByteArray(1, '\1') << QString() << false << true << false << 16 << false;
+    QTest::newRow("duplicate") << QByteArray(1, '\1') << QString() << false << false << true << 16 << false;
+    QTest::newRow("padding") << QByteArray(1, '\1') << QStringLiteral("sideBySideLeftFirst") << false << false << false << 13 << false;
+    QTest::newRow("invalid-width") << QByteArray(1, '\1') << QString() << false << false << false << 24 << false;
+    QTest::newRow("conflicting-text") << QByteArray(1, '\1') << QStringLiteral("sideBySideLeftFirst") << false << false << false << 16 << true;
+}
+void tst_QImageReader::stereoPng()
+{
+    if (!QImageReader::supportedImageFormats().contains("png"))
+        QSKIP("PNG support is required");
+    QFETCH(QByteArray, mode);
+    QFETCH(QString, expected);
+    QFETCH(bool, late);
+    QFETCH(bool, badCrc);
+    QFETCH(bool, duplicate);
+    QFETCH(int, width);
+    QFETCH(bool, conflict);
+    QImage reference(width, 8, QImage::Format_RGB32);
+    const int padding = 15 - ((width - 1) % 16);
+    const int eyeWidth = (width - padding) / 2;
+    for (int y = 0; y < reference.height(); ++y) {
+        for (int x = 0; x < width; ++x) {
+            const QColor color = x < eyeWidth ? Qt::red : x < eyeWidth + padding ? Qt::green : Qt::blue;
+            reference.setPixelColor(x, y, color);
+        }
+    }
+    QByteArray base;
+    QBuffer output(&base);
+    QVERIFY(output.open(QIODevice::WriteOnly));
+    QVERIFY(reference.save(&output, "png"));
+    const qsizetype idat = base.indexOf("IDAT") - 4;
+    QVERIFY(idat > 8);
+    const QByteArray mark = mode.isEmpty() ? QByteArray() : pngChunk("sTER", mode, badCrc);
+    QByteArray png = base.left(idat);
+    png += pngChunk("tEXt", QByteArray("Author\0Public fixture", 21));
+    if (conflict)
+        png += pngChunk("tEXt", QByteArray("Stereo3DLayout\0sideBySideRightFirst", 33));
+    if (!late)
+        png += mark;
+    if (duplicate)
+        png += mark;
+    png += base.mid(idat, base.size() - idat - 12);
+    if (late)
+        png += mark;
+    png += base.right(12);
+    QBuffer buffer(&png);
+    QVERIFY(buffer.open(QIODevice::ReadOnly));
+    QImageReader reader(&buffer, "png");
+    QCOMPARE(reader.text(QStringLiteral("Stereo3DLayout")), expected);
+    QCOMPARE(reader.text(QStringLiteral("Author")), QStringLiteral("Public fixture"));
+    const QImage image = reader.read();
+    QVERIFY2(!image.isNull(), qPrintable(reader.errorString()));
+    QCOMPARE(image.convertToFormat(QImage::Format_RGB32), reference);
+    QCOMPARE(image.text(QStringLiteral("Stereo3DLayout")), expected);
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    for (const QString &suffix : {QStringLiteral("png"), QStringLiteral("pns")}) {
+        QFile file(dir.filePath("pair." + suffix));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(png), png.size());
+        file.close();
+        QImageReader named(file.fileName());
+        QCOMPARE(named.text(QStringLiteral("Stereo3DLayout")), expected);
+        QCOMPARE(named.read().convertToFormat(QImage::Format_RGB32), reference);
+    }
 }
 
 QTEST_MAIN(tst_QImageReader)
