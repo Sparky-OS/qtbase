@@ -2278,7 +2278,7 @@ void tst_QImageReader::stereoPng()
     QByteArray png = base.left(idat);
     png += pngChunk("tEXt", QByteArray("Author\0Public fixture", 21));
     if (conflict)
-        png += pngChunk("tEXt", QByteArray("Stereo3DLayout\0sideBySideRightFirst", 33));
+        png += pngChunk("tEXt", QByteArrayLiteral("Stereo3DLayout\0sideBySideRightFirst"));
     if (!late)
         png += mark;
     if (duplicate)
