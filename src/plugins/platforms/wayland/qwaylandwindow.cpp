@@ -237,9 +237,7 @@ void QWaylandWindow::initializeWlSurface(bool colorSpace)
     }
     emit wlSurfaceCreated();
 
-    // The EGL implementation gives a stereo surface its own viewport, and a surface has only one
-    const bool stereo = isStereoOpenGLWindow();
-    if (!stereo && mDisplay->fractionalScaleManager() && qApp->highDpiScaleFactorRoundingPolicy() == Qt::HighDpiScaleFactorRoundingPolicy::PassThrough) {
+    if (mDisplay->fractionalScaleManager() && qApp->highDpiScaleFactorRoundingPolicy() == Qt::HighDpiScaleFactorRoundingPolicy::PassThrough) {
         mFractionalScale.reset(new QWaylandFractionalScale(mDisplay->fractionalScaleManager()->get_fractional_scale(mSurface->object())));
 
         connect(mFractionalScale.data(), &QWaylandFractionalScale::preferredScaleChanged,
@@ -247,7 +245,7 @@ void QWaylandWindow::initializeWlSurface(bool colorSpace)
     }
     // The fractional scale manager check is needed to work around Gnome < 36 where viewports don't work
     // Right now viewports are only necessary when a fractional scale manager is used
-    if (!stereo && display()->viewporter() && display()->fractionalScaleManager()) {
+    if (display()->viewporter() && display()->fractionalScaleManager()) {
         mViewport.reset(new QWaylandViewport(display()->createViewport(this)));
     }
 
