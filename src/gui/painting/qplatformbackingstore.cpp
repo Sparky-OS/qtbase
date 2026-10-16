@@ -384,6 +384,18 @@ void QPlatformBackingStore::createRhi(QWindow *window, QPlatformBackingStoreRhiC
         support.rhiSupport.setWindow(window);
         support.rhiSupport.setFormat(window->format());
         support.rhiSupport.create();
+    } else if (config.api() == QPlatformBackingStoreRhiConfig::OpenGL && window->format().stereo()
+               && !support.rhiSupport.format().stereo()) {
+        // A stereo window flushed through this backing store, such as the native window of a
+        // stereo QOpenGLWidget in a 2D top level, needs a context with a stereo configuration:
+        // GLX gives a window drawable the configuration of the context made current on it
+        qCDebug(lcQpaBackingStore) << "Recreating RHI support with a stereo format for" << window;
+        QSurfaceFormat format = support.rhiSupport.format();
+        format.setStereo(true);
+        support.compositor.reset();
+        support.rhiSupport.reset();
+        support.rhiSupport.setFormat(format);
+        support.rhiSupport.create();
     } else {
         qCDebug(lcQpaBackingStore) << "Window already has RHI support"
             << "with backend" << support.rhiSupport.rhi()->backendName();

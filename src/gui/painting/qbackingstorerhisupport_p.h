@@ -32,6 +32,7 @@ public:
     void reset();
 
     void setFormat(const QSurfaceFormat &format) { m_format = format; }
+    QSurfaceFormat format() const { return m_format; }
     void setWindow(QWindow *window) { m_window = window; }
     void setConfig(const QPlatformBackingStoreRhiConfig &config) { m_config = config; }
 
