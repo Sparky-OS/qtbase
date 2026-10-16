@@ -432,7 +432,8 @@ QT_BEGIN_NAMESPACE
   handled internally.
 
   On platforms with the QPlatformIntegration::StereoNativeWindows capability (Wayland,
-  when the EGL implementation supports stereo surfaces), a QOpenGLWidget that asks for
+  when the EGL implementation supports stereo surfaces; xcb with GLX, when the compositor
+  shows stereo child windows and GLX has stereo configurations), a QOpenGLWidget that asks for
   stereo, in its own format or in the default format, is shown in a native window of
   its own, a stereo surface placed at the widget's position, while the top-level window
   and the other widgets stay an ordinary one-eye surface. Child widgets of the

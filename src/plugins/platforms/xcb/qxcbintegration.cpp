@@ -308,6 +308,10 @@ bool QXcbIntegration::hasCapability(QPlatformIntegration::Capability cap) const
             && m_connection->glIntegration()->supportsSwitchableWidgetComposition();
     }
 
+    case StereoNativeWindows:
+        return m_connection->glIntegration()
+            && m_connection->glIntegration()->supportsStereoNativeWindows();
+
     default: return QPlatformIntegration::hasCapability(cap);
     }
 }

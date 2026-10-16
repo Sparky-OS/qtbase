@@ -26,6 +26,7 @@ public:
 
     virtual bool supportsThreadedOpenGL() const { return false; }
     virtual bool supportsSwitchableWidgetComposition()  const { return true; }
+    virtual bool supportsStereoNativeWindows() const { return false; }
     virtual bool handleXcbEvent(xcb_generic_event_t *event, uint responseType);
 
     virtual QXcbWindow *createWindow(QWindow *window) const = 0;

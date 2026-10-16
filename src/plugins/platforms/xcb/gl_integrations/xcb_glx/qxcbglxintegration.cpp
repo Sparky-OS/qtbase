@@ -223,5 +223,44 @@ bool QXcbGlxIntegration::supportsSwitchableWidgetComposition() const
     return isSwitchableWidgetCompositionAvailable;
 }
 
+// A native child window with a stereo format is a stereo surface of its own when the compositor
+// shows the child windows that a window lists in _KDE_NET_WM_STEREO_CONTENT_CHILDREN (KWin
+// announces version 5 or later of _KDE_NET_WM_STEREO_CONTENT_SUPPORTED on the root window) and
+// GLX has a stereo framebuffer configuration for windows.
+bool QXcbGlxIntegration::supportsStereoNativeWindows() const
+{
+    if (m_stereoNativeWindows)
+        return *m_stereoNativeWindows;
+    m_stereoNativeWindows = false;
+
+    xcb_connection_t *connection = m_connection->xcb_connection();
+    static const char name[] = "_KDE_NET_WM_STEREO_CONTENT_SUPPORTED";
+    auto atom = Q_XCB_REPLY(xcb_intern_atom, connection, true, strlen(name), name);
+    if (!atom || atom->atom == XCB_NONE)
+        return false;
+    auto supported = Q_XCB_REPLY(xcb_get_property, connection, false,
+                                 m_connection->primaryVirtualDesktop()->root(), atom->atom,
+                                 XCB_ATOM_CARDINAL, 0, 1);
+    if (!supported || supported->type != XCB_ATOM_CARDINAL || supported->format != 32
+            || supported->value_len < 1
+            || *static_cast<const uint32_t *>(xcb_get_property_value(supported.get())) < 5)
+        return false;
+
+    Display *display = static_cast<Display *>(m_connection->xlib_display());
+    const int attributes[] = {
+        GLX_DRAWABLE_TYPE, GLX_WINDOW_BIT,
+        GLX_RENDER_TYPE, GLX_RGBA_BIT,
+        GLX_DOUBLEBUFFER, True,
+        GLX_STEREO, True,
+        None
+    };
+    int count = 0;
+    GLXFBConfig *configs = glXChooseFBConfig(display, m_connection->primaryScreenNumber(), attributes, &count);
+    if (configs)
+        XFree(configs);
+    m_stereoNativeWindows = count > 0;
+    return *m_stereoNativeWindows;
+}
+
 
 QT_END_NAMESPACE

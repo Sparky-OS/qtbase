@@ -6,6 +6,8 @@
 
 #include "qxcbglintegration.h"
 
+#include <optional>
+
 QT_BEGIN_NAMESPACE
 
 class QXcbNativeInterfaceHandler;
@@ -28,10 +30,12 @@ public:
 
     bool supportsThreadedOpenGL() const override;
     bool supportsSwitchableWidgetComposition() const override;
+    bool supportsStereoNativeWindows() const override;
 
 private:
     QXcbConnection *m_connection;
     uint32_t m_glx_first_event;
+    mutable std::optional<bool> m_stereoNativeWindows;
 
     QScopedPointer<QXcbNativeInterfaceHandler> m_native_interface_handler;
 };
