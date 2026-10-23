@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only
 // Qt-Security score:significant reason:default
 #include "qwaylandshmbackingstore_p.h"
+#include "qwaylandstereodepth_p.h"
 #include "qwaylandwindow_p.h"
 #include "qwaylandsubsurface_p.h"
 #include "qwaylanddisplay_p.h"
@@ -333,6 +334,18 @@ void QWaylandShmBackingStore::flush(QWindow *window, const QRegion &region, cons
     mFrontBuffer = mBackBuffer;
 
     QMargins margins = windowDecorationMargins();
+
+    // A window drawn once per eye: its buffer holds the two views side by side, the window one
+    // view wide (QWidgetRepaintManager sets _q_stereo_pair). It is declared as a full side-by-side
+    // pair and marked as the desktop's own depth with this commit, and both views are damaged.
+    const bool pair = this->window()->property("_q_stereo_pair").toBool() && margins.isNull()
+            && mRequestedSize.width() == 2 * this->window()->width();
+    QWaylandStereoDepth::setPair(waylandWindow(), pair);
+    if (pair) {
+        waylandWindow()->safeCommit(mFrontBuffer, QRegion(QRect(QPoint(), mRequestedSize)));
+        return;
+    }
+
     waylandWindow()->safeCommit(mFrontBuffer, region.translated(margins.left(), margins.top()));
 }
 

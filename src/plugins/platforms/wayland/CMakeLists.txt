@@ -72,6 +72,7 @@ qt_internal_add_module(WaylandClient
         qwaylandshellsurface.cpp qwaylandshellsurface_p.h
         qwaylandshm.cpp qwaylandshm_p.h
         qwaylandshmbackingstore.cpp qwaylandshmbackingstore_p.h
+        qwaylandstereodepth.cpp qwaylandstereodepth_p.h
         qwaylandshmwindow.cpp qwaylandshmwindow_p.h
         qwaylandsubsurface.cpp qwaylandsubsurface_p.h
         qwaylandsurface.cpp qwaylandsurface_p.h
@@ -117,6 +118,7 @@ qt_internal_add_module(WaylandClient
         ../../../3rdparty/wayland/protocols/xdg-shell
         ../../../3rdparty/wayland/protocols/wlr-data-control
         ../../../3rdparty/wayland/protocols/session-management
+        ../../../3rdparty/wayland/protocols/kde-stereo-content
 
 )
 
@@ -159,6 +161,7 @@ qt6_generate_wayland_protocol_client_sources(WaylandClient
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../3rdparty/wayland/protocols/color-management/color-management-v1.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../3rdparty/wayland/protocols/pointer-warp/pointer-warp-v1.xml
         ${CMAKE_CURRENT_SOURCE_DIR}/../../../3rdparty/wayland/protocols/session-management/xx-session-management-v1.xml
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../../3rdparty/wayland/protocols/kde-stereo-content/kde-stereo-content-v1.xml
 )
 
 #### Keys ignored in scope 1:.:.:client.pro:<TRUE>:

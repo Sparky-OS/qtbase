@@ -4,6 +4,7 @@
 
 #include "qwaylandsessionmanager_p.h"
 #include "qwaylandwindow_p.h"
+#include "qwaylandstereodepth_p.h"
 
 #include "qwaylandbuffer_p.h"
 #include "qwaylandcursor_p.h"
@@ -324,6 +325,9 @@ void QWaylandWindow::endFrame()
 void QWaylandWindow::reset()
 {
     resetSurfaceRole();
+
+    // the stereo declaration goes with the surface
+    QWaylandStereoDepth::forgetWindow(this);
 
     if (mSurface) {
         {

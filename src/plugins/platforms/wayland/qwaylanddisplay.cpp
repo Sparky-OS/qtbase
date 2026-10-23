@@ -8,6 +8,7 @@
 #include "qwaylandappmenu_p.h"
 #include "qwaylandintegration_p.h"
 #include "qwaylandwindow_p.h"
+#include "qwaylandstereodepth_p.h"
 #include "qwaylandsurface_p.h"
 #include "qwaylandabstractdecoration_p.h"
 #include "qwaylandscreen_p.h"
@@ -353,6 +354,8 @@ QWaylandDisplay::~QWaylandDisplay(void)
 {
     if (m_eventThread)
         m_eventThread->stop();
+
+    QWaylandStereoDepth::removeDisplay(this);
 
     if (m_frameEventQueueThread)
         m_frameEventQueueThread->stop();
@@ -786,6 +789,8 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
         mGlobals.fractionalScaleManager.reset(
                 new WithDestructor<QtWayland::wp_fractional_scale_manager_v1,
                                    wp_fractional_scale_manager_v1_destroy>(registry, id, 1));
+    } else if (interface == QLatin1String("kde_stereo_content_manager_v1")) {
+        QWaylandStereoDepth::addGlobal(this, registry, id, version);
     } else if (interface == QLatin1String("wp_viewporter")) {
         mGlobals.viewporter.reset(
                 new WithDestructor<QtWayland::wp_viewporter, wp_viewporter_destroy>(
@@ -843,6 +848,7 @@ void QWaylandDisplay::registry_global(uint32_t id, const QString &interface, uin
 
 void QWaylandDisplay::registry_global_remove(uint32_t id)
 {
+    QWaylandStereoDepth::removeGlobal(this, id);
     for (int i = 0, ie = mRegistryGlobals.size(); i != ie; ++i) {
         RegistryGlobal &global = mRegistryGlobals[i];
         if (global.id == id) {

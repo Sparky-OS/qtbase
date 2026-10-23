@@ -1,0 +1,18 @@
+[
+    {
+        "Id": "kde-stereo-content-protocol",
+        "Name": "KDE Stereo Content Protocol",
+        "QDocModule": "qtwaylandclient",
+        "QtUsage": "Used in the Qt Wayland platform plugin to hand a window drawn once per eye to Stereo KWin",
+        "Files": "kde-stereo-content-v1.xml",
+
+        "Description": "Declares that a surface's picture holds two views, full side by side, and follows a surface's desktop depth.",
+        "Homepage": "https://invent.kde.org/danielcamposramos/plasma-wayland-protocols",
+        "Version": "3",
+        "DownloadLocation": "https://invent.kde.org/danielcamposramos/plasma-wayland-protocols/-/raw/stereo3d-6.7/src/protocols/kde-stereo-content-v1.xml",
+        "LicenseId": "MIT-CMU",
+        "License": "CMU License",
+        "LicenseFile": "../MIT_LICENSE.txt",
+        "Copyright": "Copyright 2026 Daniel Campos Ramos"
+    }
+]
