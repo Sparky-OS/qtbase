@@ -519,12 +519,39 @@ void QWidgetPrivate::scrollRect(const QRect &rect, int dx, int dy)
     }
 }
 
+// The eye being painted, while a window is painted once per eye.
+static int s_stereoEye = 0;
+
+int qt_widget_stereo_eye()
+{
+    return s_stereoEye;
+}
+
+/*
+    Whether the window's style draws its elements in depth now: the style sets the window's
+    _q_stereo_depth while the compositor shows depth inside the window (it is on a stereo output
+    and awake). Such a window is painted once per eye, each widget moved by its own eye shift
+    (QWidgetPrivate::paintSiblingsRecursive()), into a backing store twice as wide, the left eye
+    first; the platform hands the pair over as the desktop's own depth (_q_stereo_pair).
+    Render-to-texture widgets are composited per window, and a frame the client draws around the
+    window would be drawn into one half only, so a window that has either is painted once.
+*/
+static bool paintsPerEye(QWidget *tlw)
+{
+    const QWindow *window = tlw->windowHandle();
+    return window && window->property("_q_stereo_depth").toBool() && !qt_widget_private(tlw)->textureChildSeen
+            && window->frameMargins().isNull();
+}
+
 /*
     Moves the whole rect by (dx, dy) in widget's coordinate system.
     Doesn't generate any updates.
 */
 bool QWidgetRepaintManager::bltRect(const QRect &rect, int dx, int dy, QWidget *widget)
 {
+    // Each eye of a window painted once per eye is in its own half of the backing store.
+    if (paintsPerEye(tlw))
+        return false;
     const QPoint pos(widget->mapTo(tlw, rect.topLeft()));
     const QRect tlwRect(QRect(pos, rect.size()));
     if (dirty.intersects(tlwRect))
@@ -715,9 +742,11 @@ void QWidgetRepaintManager::paintAndFlush()
     bool repaintAllWidgets = false;
 
     const QRect tlwRect = tlw->data->crect;
-    if (!updatesDisabled && store->size() != tlwRect.size()) {
+    const bool perEye = paintsPerEye(tlw);
+    const QSize storeSize = perEye ? QSize(2 * tlwRect.width(), tlwRect.height()) : tlwRect.size();
+    if (!updatesDisabled && store->size() != storeSize) {
         QPlatformIntegration *integration = QGuiApplicationPrivate::platformIntegration();
-        if (hasStaticContents() && !store->size().isEmpty()
+        if (!perEye && hasStaticContents() && !store->size().isEmpty()
             && integration->hasCapability(QPlatformIntegration::BackingStoreStaticContents)) {
             // Repaint existing dirty area and newly visible area.
             const QRect clipRect(QPoint(0, 0), store->size());
@@ -736,11 +765,20 @@ void QWidgetRepaintManager::paintAndFlush()
         }
     }
 
-    if (store->size() != tlwRect.size())
-        store->resize(tlwRect.size());
+    if (store->size() != storeSize)
+        store->resize(storeSize);
 
     if (updatesDisabled)
         return;
+
+    if (perEye) {
+        // Every eye is painted whole: an element's place is not the same in the two eyes.
+        dirty = QRegion(0, 0, tlwRect.width(), tlwRect.height());
+        for (int i = 0; i < dirtyWidgets.size(); ++i)
+            resetWidget(dirtyWidgets.at(i));
+        dirtyWidgets.clear();
+        repaintAllWidgets = true;
+    }
 
     // Contains everything that needs repaint.
     QRegion toClean(dirty);
@@ -876,7 +914,7 @@ void QWidgetRepaintManager::paintAndFlush()
     }
 #endif
 
-    store->beginPaint(toClean);
+    store->beginPaint(perEye ? QRegion(0, 0, storeSize.width(), storeSize.height()) : toClean);
 
     // Must do this before sending any paint events because
     // the size may change in the paint event.
@@ -910,10 +948,29 @@ void QWidgetRepaintManager::paintAndFlush()
     if (repaintAllWidgets || !dirtyCopy.isEmpty()) {
         QWidgetPrivate::DrawWidgetFlags flags = QWidgetPrivate::DrawAsRoot | QWidgetPrivate::DrawRecursive
                 | QWidgetPrivate::UseEffectRegionBounds;
-        tlw->d_func()->drawWidget(store->paintDevice(), dirtyCopy, QPoint(), flags, nullptr, this);
+        if (perEye) {
+            // Once per eye, the left eye in the left half. The style reads the window's
+            // _q_stereo_eye for the parts it moves itself; a widget that moves may leave what is
+            // beneath it uncovered, so everything beneath is painted.
+            QWindow *window = tlw->windowHandle();
+            for (const int eye : {1, 2}) {
+                s_stereoEye = eye;
+                window->setProperty("_q_stereo_eye", eye);
+                tlw->d_func()->drawWidget(store->paintDevice(), dirtyCopy, QPoint(eye == 2 ? tlwRect.width() : 0, 0),
+                                          flags | QWidgetPrivate::DontSubtractOpaqueChildren, nullptr, this);
+            }
+            s_stereoEye = 0;
+            window->setProperty("_q_stereo_eye", 0);
+        } else {
+            tlw->d_func()->drawWidget(store->paintDevice(), dirtyCopy, QPoint(), flags, nullptr, this);
+        }
     }
 
     store->endPaint();
+
+    // The platform hands a pair over as such.
+    if (QWindow *window = tlw->windowHandle(); window && window->property("_q_stereo_pair").toBool() != perEye)
+        window->setProperty("_q_stereo_pair", perEye);
 
     flush();
 }

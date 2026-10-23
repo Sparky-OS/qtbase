@@ -310,6 +310,7 @@ public:
     void sendPaintEvent(const QRegion &toBePainted);
 
 
+    static int stereoParallax(const QWidget *widget);
     void paintSiblingsRecursive(QPaintDevice *pdev, const QObjectList& children, int index,
                                 const QRegion &rgn, const QPoint &offset, DrawWidgetFlags flags,
                                 QPainter *sharedPainter, QWidgetRepaintManager *repaintManager);

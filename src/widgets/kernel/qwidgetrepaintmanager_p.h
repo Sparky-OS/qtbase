@@ -113,6 +113,10 @@ private:
     Q_DISABLE_COPY_MOVE(QWidgetRepaintManager)
 };
 
+// The eye a window drawn once per eye is being painted for while it is: 1 the left eye, 2 the
+// right eye, else 0.
+int qt_widget_stereo_eye();
+
 QT_END_NAMESPACE
 
 #endif // QWIDGETREPAINTMANAGER_P_H

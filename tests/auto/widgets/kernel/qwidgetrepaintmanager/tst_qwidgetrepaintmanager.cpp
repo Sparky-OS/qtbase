@@ -263,6 +263,7 @@ private slots:
     void paintOnScreenUpdates();
     void evaluateRhi();
     void rhiRecreateMaintainsWindowProperties();
+    void paintOncePerEye();
 
 #if defined(QT_BUILD_INTERNAL)
     void scrollWithOverlap();
@@ -1074,6 +1075,125 @@ void tst_QWidgetRepaintManager::moveInOutOverlapped()
     QVERIFY(compareWidget(&scene));
 }
 #endif //# defined(QT_BUILD_INTERNAL)
+
+namespace {
+// Records the eyes a window is painted for, from its _q_stereo_eye.
+class EyeRecorder : public QObject
+{
+public:
+    QList<int> eyes;
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        if (event->type() == QEvent::DynamicPropertyChange
+            && static_cast<QDynamicPropertyChangeEvent *>(event)->propertyName() == "_q_stereo_eye")
+            eyes.append(watched->property("_q_stereo_eye").toInt());
+        return QObject::eventFilter(watched, event);
+    }
+};
+
+QWidget *filled(QWidget *parent, const QRect &geometry, const QColor &color)
+{
+    auto *widget = new QWidget(parent);
+    widget->setGeometry(geometry);
+    QPalette palette = widget->palette();
+    palette.setColor(QPalette::Window, color);
+    widget->setPalette(palette);
+    widget->setAutoFillBackground(true);
+    return widget;
+}
+} // namespace
+
+/*
+    A window whose style draws its elements in depth (_q_stereo_depth) is painted once per eye into
+    a backing store twice as wide, the left eye first. Each widget moves by its eye shift from its
+    _q_stereo_parallax, as Stereo KWin splits a parallax (the left eye p - p / 2 to the right for
+    nearer, the right eye -(p / 2)); a widget without one moves with the widget it is in; a widget
+    nearer than what it lies on is drawn whole, a deeper one is cut to its own rectangle. Without
+    depth the window is painted once, as before.
+*/
+void tst_QWidgetRepaintManager::paintOncePerEye()
+{
+    if (QGuiApplication::platformName() != QLatin1String("offscreen"))
+        QSKIP("Reads the offscreen backing store");
+
+    // a frame the client would draw around the window keeps it painted once (below)
+    QWidget window(nullptr, Qt::FramelessWindowHint);
+    window.setGeometry(QRect(QPoint(100, 100), QSize(120, 60)));
+    QPalette palette = window.palette();
+    palette.setColor(QPalette::Window, Qt::white);
+    window.setPalette(palette);
+    window.setAutoFillBackground(true);
+    QWidget *raised = filled(&window, QRect(10, 10, 30, 20), Qt::red);
+    raised->setProperty("_q_stereo_parallax", 4);
+    filled(raised, QRect(5, 5, 10, 10), Qt::green);
+    QWidget *sunk = filled(&window, QRect(60, 10, 30, 20), Qt::blue);
+    sunk->setProperty("_q_stereo_parallax", -4);
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    QPlatformBackingStore *store = window.backingStore()->handle();
+    if (store->toImage().devicePixelRatio() != 1)
+        QSKIP("Measures in whole device pixels");
+    const QImage flat = store->toImage().copy(0, 0, 120, 60);
+
+    EyeRecorder recorder;
+    window.windowHandle()->installEventFilter(&recorder);
+    window.windowHandle()->setProperty("_q_stereo_depth", true);
+    window.update();
+    QTRY_COMPARE(store->toImage().width(), 240);
+    QCOMPARE(recorder.eyes, QList<int>({1, 2, 0}));
+    QVERIFY(window.windowHandle()->property("_q_stereo_pair").toBool());
+
+    const QImage pair = store->toImage();
+    auto at = [&pair](int x) { return QColor(pair.pixel(x, 15)); };
+    // left eye: the raised widget 2 to the right, whole, the green one with it
+    QCOMPARE(at(11), QColor(Qt::white));
+    QCOMPARE(at(12), QColor(Qt::red));
+    QCOMPARE(at(41), QColor(Qt::red));
+    QCOMPARE(at(42), QColor(Qt::white));
+    QCOMPARE(at(16), QColor(Qt::red));
+    QCOMPARE(at(17), QColor(Qt::green));
+    // left eye: the sunk widget 2 to the left, cut to its own rectangle
+    QCOMPARE(at(59), QColor(Qt::white));
+    QCOMPARE(at(60), QColor(Qt::blue));
+    QCOMPARE(at(87), QColor(Qt::blue));
+    QCOMPARE(at(88), QColor(Qt::white));
+    // right eye
+    QCOMPARE(at(120 + 7), QColor(Qt::white));
+    QCOMPARE(at(120 + 8), QColor(Qt::red));
+    QCOMPARE(at(120 + 37), QColor(Qt::red));
+    QCOMPARE(at(120 + 38), QColor(Qt::white));
+    QCOMPARE(at(120 + 61), QColor(Qt::white));
+    QCOMPARE(at(120 + 62), QColor(Qt::blue));
+    QCOMPARE(at(120 + 89), QColor(Qt::blue));
+    QCOMPARE(at(120 + 90), QColor(Qt::white));
+    // nothing else moved
+    QCOMPARE(pair.copy(0, 40, 120, 20), flat.copy(0, 40, 120, 20));
+    QCOMPARE(pair.copy(120, 40, 120, 20), flat.copy(0, 40, 120, 20));
+
+    // Without depth, painted once again, exactly as before.
+    recorder.eyes.clear();
+    window.windowHandle()->setProperty("_q_stereo_depth", false);
+    window.update();
+    QTRY_COMPARE(store->toImage().width(), 120);
+    QVERIFY(!window.windowHandle()->property("_q_stereo_pair").toBool());
+    QVERIFY(recorder.eyes.isEmpty());
+    QCOMPARE(store->toImage(), flat);
+
+    // A window with a frame of its own is painted once: the frame would be drawn in one half.
+    QWidget framed;
+    framed.setGeometry(QRect(QPoint(300, 100), QSize(120, 60)));
+    framed.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&framed));
+    if (framed.windowHandle()->frameMargins().isNull())
+        QSKIP("The platform draws no frame around this window");
+    framed.windowHandle()->setProperty("_q_stereo_depth", true);
+    framed.update();
+    QTest::qWait(100);
+    QCOMPARE(framed.backingStore()->handle()->toImage().width(), 120);
+    QVERIFY(!framed.windowHandle()->property("_q_stereo_pair").toBool());
+}
 
 QTEST_MAIN(tst_QWidgetRepaintManager)
 #include "tst_qwidgetrepaintmanager.moc"

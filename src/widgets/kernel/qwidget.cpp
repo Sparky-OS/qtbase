@@ -5849,9 +5849,12 @@ void QWidgetPrivate::paintSiblingsRecursive(QPaintDevice *pdev, const QObjectLis
     QWidgetPrivate *wd = w->d_func();
     const QPoint widgetPos(w->data->crect.topLeft());
     const bool hasMask = wd->extra && wd->extra->hasMask && !wd->graphicsEffect;
+    // While a window is painted once per eye, a widget moves by its own eye shift.
+    const int eye = repaintManager ? qt_widget_stereo_eye() : 0;
     if (index > 0) {
         QRegion wr(rgn);
-        if (wd->isOpaque)
+        // a widget that moves does not cover its own rectangle in every eye
+        if (wd->isOpaque && !eye)
             wr -= hasMask ? wd->extra->mask.translated(widgetPos) : w->data->crect;
         paintSiblingsRecursive(pdev, siblings, --index, wr, offset, flags,
                                sharedPainter, repaintManager);
@@ -5867,8 +5870,45 @@ void QWidgetPrivate::paintSiblingsRecursive(QPaintDevice *pdev, const QObjectLis
         wRegion.translate(-widgetPos);
         if (hasMask)
             wRegion &= wd->extra->mask;
-        wd->drawWidget(pdev, wRegion, offset + widgetPos, flags, sharedPainter, repaintManager);
+        QPoint shift;
+        if (eye) {
+            // The widget's parallax (_q_stereo_parallax, in device pixels, positive when nearer than
+            // the screen), which the style gives it; without one it moves with the widget it is in.
+            // Each eye takes its share as Stereo KWin splits a parallax, the left eye the larger
+            // half, to the right for nearer. Nearer than what it lies on, the widget is drawn
+            // whole, over its surroundings; deeper, it is seen through its own rectangle, cut to it.
+            const int parallax = stereoParallax(w);
+            const int parentParallax = stereoParallax(w->parentWidget());
+            auto eyeShift = [eye](int p) {
+                return eye == 1 ? p - p / 2 : -(p / 2);
+            };
+            const qreal dpr = pdev->devicePixelRatio() > 0 ? pdev->devicePixelRatio() : 1;
+            shift.setX(qRound((eyeShift(parallax) - eyeShift(parentParallax)) / dpr));
+            if (!shift.isNull()) {
+                if (parallax >= parentParallax)
+                    wRegion = QRegion(rgn & wd->effectiveRectFor(w->data->crect.translated(shift))).translated(-widgetPos - shift);
+                else
+                    wRegion = wRegion.translated(-shift) & w->rect();
+                if (hasMask)
+                    wRegion &= wd->extra->mask;
+            }
+        }
+        wd->drawWidget(pdev, wRegion, offset + widgetPos + shift, flags, sharedPainter, repaintManager);
     }
+}
+
+/*
+    The parallax a style gave \a widget for a window painted once per eye (_q_stereo_parallax),
+    or the parallax of the nearest widget around it that has one; 0 for none.
+*/
+int QWidgetPrivate::stereoParallax(const QWidget *widget)
+{
+    for (; widget; widget = widget->isWindow() ? nullptr : widget->parentWidget()) {
+        const QVariant parallax = widget->property("_q_stereo_parallax");
+        if (parallax.isValid())
+            return parallax.toInt();
+    }
+    return 0;
 }
 
 #if QT_CONFIG(graphicseffect)
