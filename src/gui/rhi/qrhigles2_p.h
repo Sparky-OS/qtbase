@@ -754,6 +754,7 @@ struct QGles2SwapChain : public QRhiSwapChain
     bool createOrResize() override;
 
     void initSwapChainRenderTarget(QGles2SwapChainRenderTarget *rt);
+    void updateStereoTargets();
 
     QSurface *surface = nullptr;
     QSize pixelSize;

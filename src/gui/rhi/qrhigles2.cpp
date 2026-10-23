@@ -2343,6 +2343,9 @@ QRhi::FrameOpResult QRhiGles2::beginFrame(QRhiSwapChain *swapChain, QRhi::BeginF
     if (!ensureContext(swapChainD->surface))
         return contextLost ? QRhi::FrameOpDeviceLost : QRhi::FrameOpError;
 
+    // Making the context current is where a platform gives the surface the views it now has.
+    swapChainD->updateStereoTargets();
+
     ctx->handle()->beginFrame();
 
     currentSwapChain = swapChainD;
@@ -6940,6 +6943,28 @@ void QGles2SwapChain::initSwapChainRenderTarget(QGles2SwapChainRenderTarget *rt)
     rt->d.srgbUpdateAndBlend = m_flags.testFlag(QRhiSwapChain::sRGB);
 }
 
+void QGles2SwapChain::updateStereoTargets()
+{
+    // The window's surface may gain or lose its right buffer while it is shown, when the
+    // platform recreates it with another number of views, so this follows the format the
+    // surface has now rather than the one it had when the swapchain was built.
+    const bool stereo = m_window && m_window->format().stereo();
+    if (stereo == rtLeft.d.isValid())
+        return;
+
+    if (stereo) {
+        initSwapChainRenderTarget(&rtLeft);
+        rtLeft.d.stereoTarget = QRhiSwapChain::LeftBuffer;
+        initSwapChainRenderTarget(&rtRight);
+        rtRight.d.stereoTarget = QRhiSwapChain::RightBuffer;
+    } else {
+        rtLeft.d.rp = nullptr;
+        rtLeft.d.stereoTarget.reset();
+        rtRight.d.rp = nullptr;
+        rtRight.d.stereoTarget.reset();
+    }
+}
+
 bool QGles2SwapChain::createOrResize()
 {
     // can be called multiple times due to window resizes
@@ -6959,12 +6984,9 @@ bool QGles2SwapChain::createOrResize()
 
     initSwapChainRenderTarget(&rt);
 
-    if (m_window->format().stereo()) {
-        initSwapChainRenderTarget(&rtLeft);
-        rtLeft.d.stereoTarget = QRhiSwapChain::LeftBuffer;
-        initSwapChainRenderTarget(&rtRight);
-        rtRight.d.stereoTarget = QRhiSwapChain::RightBuffer;
-    }
+    rtLeft.d.rp = nullptr;
+    rtRight.d.rp = nullptr;
+    updateStereoTargets();
 
     QRHI_RES_RHI(QRhiGles2);
     if (rhiD->rhiFlags.testFlag(QRhi::EnableTimestamps) && rhiD->caps.timestamps)
