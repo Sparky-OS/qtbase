@@ -40,11 +40,14 @@ void removeGlobal(QWaylandDisplay *display, uint32_t id);
 void removeDisplay(QWaylandDisplay *display);
 
 // Whether the compositor takes a window's pair as the desktop's own depth.
-bool isSupported(QWaylandDisplay *display);
+Q_WAYLANDCLIENT_EXPORT bool isSupported(QWaylandDisplay *display);
 
 // Declares, with the window's next commit, that the buffer holds both eyes side by side and is
 // the desktop's own depth, or withdraws it.
 void setPair(QWaylandWindow *window, bool pair);
+// Marks, with the window's next commit, the pair someone else declares (the EGL implementation
+// for a surface with two views) as the desktop's own depth, or withdraws the mark. Any thread.
+Q_WAYLANDCLIENT_EXPORT void setDesktopDepth(QWaylandWindow *window, bool desktopDepth);
 // Before the window's surface goes away.
 void forgetWindow(QWaylandWindow *window);
 

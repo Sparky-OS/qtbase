@@ -459,6 +459,7 @@ bool QWaylandGLContext::makeCurrent(QPlatformSurface *surface)
     m_currentWindow = static_cast<QWaylandEglWindow *>(surface);
 
     QMutexLocker lock(m_currentWindow->eglSurfaceLock());
+    m_currentWindow->beginFrameViews();
     EGLSurface eglSurface = m_currentWindow->eglSurface();
 
     if (!checkGraphicsReset())
@@ -540,6 +541,7 @@ void QWaylandGLContext::swapBuffers(QPlatformSurface *surface)
     window->handleUpdate();
     if (!eglSwapBuffers(eglDisplay(), eglSurface))
         qCWarning(lcQpaWayland, "eglSwapBuffers failed with %#x, surface: %p", eglGetError(), eglSurface);
+    window->frameSwapped();
 }
 
 GLuint QWaylandGLContext::defaultFramebufferObject(QPlatformSurface *surface) const

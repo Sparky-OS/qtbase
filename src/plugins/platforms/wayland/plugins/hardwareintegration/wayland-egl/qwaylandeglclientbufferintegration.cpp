@@ -184,8 +184,13 @@ EGLDisplay QWaylandEglClientBufferIntegration::eglDisplay() const
 
 bool QWaylandEglClientBufferIntegration::supportsStereo(const QSurfaceFormat &format) const
 {
+    return format.stereo() && supportsTwoViews(format);
+}
+
+bool QWaylandEglClientBufferIntegration::supportsTwoViews(const QSurfaceFormat &format) const
+{
     // Two views of the window surface are the left and right back buffers of desktop OpenGL
-    return format.stereo() && m_supportsMultiview
+    return m_supportsMultiview
             && format.renderableType() != QSurfaceFormat::OpenGLES
             && QOpenGLContext::openGLModuleType() == QOpenGLContext::LibGL;
 }

@@ -38,6 +38,8 @@ public:
 
     EGLDisplay eglDisplay() const;
     bool supportsStereo(const QSurfaceFormat &format) const override;
+    // Whether a window surface of this format can have two views, a left and a right back buffer.
+    bool supportsTwoViews(const QSurfaceFormat &format) const;
 
 private:
     QWaylandDisplay *m_display = nullptr;
