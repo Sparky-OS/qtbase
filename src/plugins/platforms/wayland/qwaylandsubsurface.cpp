@@ -39,6 +39,15 @@ void QWaylandSubSurface::setDeSync()
     QWaylandSubSurface::set_desync();
 }
 
+void QWaylandSubSurface::setBelowParent(bool below)
+{
+    if (below)
+        place_below(m_parent->wlSurface());
+    else
+        place_above(m_parent->wlSurface());
+    m_belowParent = below;
+}
+
 void QWaylandSubSurface::set_sync()
 {
     m_synchronized = true;

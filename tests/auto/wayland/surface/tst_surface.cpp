@@ -3,6 +3,8 @@
 
 #include "mockcompositor.h"
 #include <QtGui/QRasterWindow>
+#include <QtGui/qpa/qplatformnativeinterface.h>
+#include <wayland-client-core.h>
 #if QT_CONFIG(opengl)
 #include <QtOpenGL/QOpenGLWindow>
 #endif
@@ -27,6 +29,7 @@ private slots:
     void createSubsurface();
     void createSubsurfaceForHiddenParent();
     void changeToSubsurface();
+    void subsurfaceStaysOnBottom();
 };
 
 tst_surface::tst_surface()
@@ -241,6 +244,64 @@ void tst_surface::changeToSubsurface()
     window2.setParent(nullptr);
     window2.show();
     QCOMPOSITOR_TRY_VERIFY(xdgToplevel(1));
+}
+
+// A child window that stays on the bottom lies below its parent's own surface; others stay above it.
+void tst_surface::subsurfaceStaysOnBottom()
+{
+    m_config.autoFrameCallback = true;
+    auto autoFrameCallback = qScopeGuard([&] { m_config.autoFrameCallback = false; });
+
+    QRasterWindow window;
+    window.resize(64, 64);
+
+    QRasterWindow below;
+    below.setParent(&window);
+    below.setFlag(Qt::WindowStaysOnBottomHint);
+    below.resize(64, 64);
+
+    QRasterWindow above;
+    above.setParent(&window);
+    above.resize(32, 32);
+
+    window.show();
+    below.show();
+    above.show();
+
+    QCOMPOSITOR_TRY_VERIFY(xdgToplevel());
+    QCOMPOSITOR_TRY_VERIFY(subSurface(1));
+    exec([&] { xdgToplevel()->sendCompleteConfigure(); });
+    QCOMPOSITOR_TRY_VERIFY(xdgSurface()->m_committedConfigureSerial);
+
+    // the subsurface of a child window, found by the id of the window's wl_surface (each call runs
+    // in the compositor's thread itself, so it is checked with QTRY_*, not QCOMPOSITOR_TRY_*)
+    const auto placements = [&](QWindow *child) {
+        auto *native = QGuiApplication::platformNativeInterface();
+        const uint id = wl_proxy_get_id(static_cast<wl_proxy *>(native->nativeResourceForWindow("surface", child)));
+        return exec([&] {
+            QList<Subsurface::Placement> list;
+            for (Subsurface *subsurface : get<SubCompositor>()->m_subsurfaces) {
+                if (subsurface->m_surface && wl_resource_get_id(subsurface->m_surface->resource()->handle) == id)
+                    list = subsurface->m_placements;
+            }
+            return list;
+        });
+    };
+    const Surface *parentSurface = exec([&] { return xdgToplevel()->surface(); });
+
+    QTRY_COMPARE(placements(&below).size(), 1);
+    QVERIFY(placements(&below).first().below);
+    QCOMPARE(placements(&below).first().sibling, parentSurface);
+    QVERIFY(placements(&above).isEmpty());
+    QCOMPARE(below.property("_q_wayland_below_parent").toBool(), true);
+    QVERIFY(!above.property("_q_wayland_below_parent").toBool());
+
+    // without the hint again it lies above its parent
+    below.setFlag(Qt::WindowStaysOnBottomHint, false);
+    QTRY_COMPARE(placements(&below).size(), 2);
+    QVERIFY(!placements(&below).last().below);
+    QCOMPARE(placements(&below).last().sibling, parentSurface);
+    QCOMPARE(below.property("_q_wayland_below_parent").toBool(), false);
 }
 
 QCOMPOSITOR_TEST_MAIN(tst_surface)

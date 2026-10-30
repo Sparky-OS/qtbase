@@ -382,6 +382,7 @@ private:
     void setOpaqueArea(const QRegion &opaqueArea);
     bool isOpaque() const;
     void updateInputRegion();
+    void updateSubSurfaceStacking();
     void updateViewport();
     bool calculateExposure() const;
     void setPendingImageDescription();

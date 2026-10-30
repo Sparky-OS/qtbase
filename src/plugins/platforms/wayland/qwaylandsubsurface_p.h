@@ -43,6 +43,10 @@ public:
     bool isSync() const { return m_synchronized; }
     QMutex *syncMutex() { return &m_syncLock; }
 
+    // whether the subsurface lies below its parent's own surface rather than above it
+    bool isBelowParent() const { return m_belowParent; }
+    void setBelowParent(bool below);
+
 private:
 
     // Intentionally hide public methods from ::wl_subsurface
@@ -53,6 +57,7 @@ private:
     QWaylandWindow *m_parent = nullptr;
     bool m_synchronized = false;
     QMutex m_syncLock;
+    bool m_belowParent = false;
 
 };
 

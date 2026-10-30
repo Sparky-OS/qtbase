@@ -196,9 +196,22 @@ void SubCompositor::subcompositor_get_subsurface(Resource *resource, uint32_t id
         return;
     }
 
-    auto *subsurface = new Subsurface(this, resource->client(), id, resource->version());
+    auto *subsurface = new Subsurface(this, resource->client(), id, resource->version(), surface,
+                                      fromResource<Surface>(parent));
     m_subsurfaces.append(subsurface);
     emit subsurfaceCreated(subsurface);
+}
+
+void Subsurface::subsurface_place_above(Resource *resource, ::wl_resource *sibling)
+{
+    Q_UNUSED(resource);
+    m_placements.append({false, fromResource<Surface>(sibling)});
+}
+
+void Subsurface::subsurface_place_below(Resource *resource, ::wl_resource *sibling)
+{
+    Q_UNUSED(resource);
+    m_placements.append({true, fromResource<Surface>(sibling)});
 }
 
 void Output::sendGeometry()

@@ -116,8 +116,10 @@ void QWaylandWindow::initWindow()
         if (!parent->mSurface)
             parent->initializeWlSurface();
         if (parent->wlSurface()) {
-            if (::wl_subsurface *subsurface = mDisplay->createSubSurface(this, parent))
+            if (::wl_subsurface *subsurface = mDisplay->createSubSurface(this, parent)) {
                 mSubSurfaceWindow = new QWaylandSubSurface(this, parent, subsurface);
+                updateSubSurfaceStacking();
+            }
         }
     } else if (shouldCreateShellSurface()) {
         Q_ASSERT(!mShellSurface);
@@ -412,6 +414,7 @@ void QWaylandWindow::setParent(const QPlatformWindow *parent)
         delete mSubSurfaceWindow;
         QWaylandWindow *p = const_cast<QWaylandWindow *>(static_cast<const QWaylandWindow *>(parent));
         mSubSurfaceWindow = new QWaylandSubSurface(this, p, mDisplay->createSubSurface(this, p));
+        updateSubSurfaceStacking();
     } else if ((!lastParent && parent) || (lastParent && !parent)) {
         // we're changing role, need to make a new wl_surface
         reset();
@@ -664,6 +667,24 @@ void QWaylandWindow::setVisible(bool visible)
     }
 }
 
+
+// A child window that asks to stay on the bottom (Qt::WindowStaysOnBottomHint) lies below its parent's
+// own surface, as a picture under a window that is transparent where the picture shows; any other child
+// window lies above it. The order is the parent's state, so it takes effect with the parent's next commit.
+// The window's _q_wayland_below_parent says where it lies, so that a program can tell this Qt does it.
+void QWaylandWindow::updateSubSurfaceStacking()
+{
+    if (!mSubSurfaceWindow)
+        return;
+    QWaylandWindow *parent = mSubSurfaceWindow->parent();
+    const bool below = mFlags.testFlag(Qt::WindowStaysOnBottomHint);
+    if (!parent || !parent->wlSurface() || below == mSubSurfaceWindow->isBelowParent())
+        return;
+    mSubSurfaceWindow->setBelowParent(below);
+    window()->setProperty("_q_wayland_below_parent", below);
+    if (parent->isExposed())
+        parent->sendExposeEvent(QRect(QPoint(), parent->geometry().size()));
+}
 
 void QWaylandWindow::raise()
 {
@@ -1079,6 +1100,7 @@ void QWaylandWindow::setWindowFlags(Qt::WindowFlags flags)
     } else {
         if (mShellSurface)
             mShellSurface->setWindowFlags(flags);
+        updateSubSurfaceStacking();
     }
 
     createDecoration();

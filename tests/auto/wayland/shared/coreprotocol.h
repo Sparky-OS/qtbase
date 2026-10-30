@@ -237,16 +237,30 @@ class Subsurface : public QObject, public QtWaylandServer::wl_subsurface
 {
     Q_OBJECT
 public:
-    explicit Subsurface(SubCompositor *subCompositor, wl_client *client, int id, int version)
-        : QtWaylandServer::wl_subsurface(client, id, version), m_subcompositor(subCompositor)
+    explicit Subsurface(SubCompositor *subCompositor, wl_client *client, int id, int version,
+                        Surface *surface = nullptr, Surface *parent = nullptr)
+        : QtWaylandServer::wl_subsurface(client, id, version)
+        , m_surface(surface)
+        , m_parent(parent)
+        , m_subcompositor(subCompositor)
     {
     }
+    // the place_above and place_below requests, in order: whether below, and the reference surface
+    struct Placement {
+        bool below;
+        Surface *sibling;
+    };
+    QList<Placement> m_placements;
+    Surface *m_surface = nullptr;
+    Surface *m_parent = nullptr;
     ~Subsurface()
     {
         m_subcompositor->m_subsurfaces.removeOne(this);
         qDebug() << m_subcompositor->m_subsurfaces;
     }
     void subsurface_destroy(Resource *resource) override { wl_resource_destroy(resource->handle); }
+    void subsurface_place_above(Resource *resource, ::wl_resource *sibling) override;
+    void subsurface_place_below(Resource *resource, ::wl_resource *sibling) override;
     void subsurface_destroy_resource(Resource *resource) override
     {
         Q_UNUSED(resource)
